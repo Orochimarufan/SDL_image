@@ -339,12 +339,34 @@ endif()
 if(SDL2IMAGE_AVIF)
     target_compile_definitions(SDL2_image PRIVATE LOAD_AVIF)
     if(SDL2IMAGE_AVIF_VENDORED)
-        message(STATUS "${PROJECT_NAME}: Using vendored libavif")
-        message(FATAL_ERROR "libavif is not vendored (yet)")
+        message(STATUS "${PROJECT_NAME}: Using vendored libavif and dav1d")
+        # Build dav1d decoder
+        include(ExternalProject)
+        ExternalProject_Add(avif-dav1d # Don't make "dav1d" a valid target or libavif build breaks
+            PREFIX external/dav1d
+            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/dav1d
+            BINARY_DIR external/dav1d/build
+            CONFIGURE_COMMAND meson setup
+                -D enable_tools=false
+                -D enable_tests=false
+                --default-library static
+                --buildtype release
+                --prefix "${CMAKE_CURRENT_BINARY_DIR}/external/dav1d"
+                "${CMAKE_CURRENT_SOURCE_DIR}/external/dav1d"
+            BUILD_COMMAND meson compile
+            INSTALL_COMMAND meson install
+            EXCLUDE_FROM_ALL ON)
+        # Add pkg-config prefix
+        list(PREPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_BINARY_DIR}/external/dav1d")
+        # libavif CMake Options
+        set(AVIF_CODEC_DAV1D ON CACHE BOOL "libavif dav1d codec" FORCE)
+        # We build dav1d ourself above
+        set(AVIF_LOCAL_DAV1D OFF CACHE BOOL "libavif vendored dav1d" FORCE)
         sdl_check_project_in_subfolder(external/libavif libavif SDL2IMAGE_VENDORED)
         set(BUILD_SHARED_LIBS ${SDL2IMAGE_AVIF_SHARED})
         add_subdirectory(external/libavif EXCLUDE_FROM_ALL)
-        list(APPEND INSTALL_EXTRA_TARGETS libavif)
+        add_dependencies(avif avif-dav1d)
+        list(APPEND INSTALL_EXTRA_TARGETS avif)
         if(NOT SDL2IMAGE_AVIF_SHARED)
             list(APPEND PC_LIBS -l$<TARGET_FILE_BASE_NAME:avif>)
         endif()
@@ -422,13 +444,13 @@ if(SDL2IMAGE_JXL)
         enable_language(CXX)
         message(STATUS "${PROJECT_NAME}: Using vendored libjxl")
         set(BUILD_TESTING OFF)
-        # JPEGXL_ENABLE_MANPAGES variable is used by libjxl
+        # libjxl CMake options
+        set(JPEGXL_ENABLE_TOOLS OFF CACHE BOOL "libjxl tools option" FORCE)
         set(JPEGXL_ENABLE_MANPAGES OFF CACHE BOOL "libjxl manpage option" FORCE)
-        # JPEGXL_ENABLE_PLUGINS variable is used by libjxl
-        set(JPEGXL_ENABLE_PLUGINS OFF CACHE BOOL "libjxl manpage option" FORCE)
-        # JPEGXL_ENABLE_SKCMS variable is used by libjxl
+        set(JPEGXL_ENABLE_PLUGINS OFF CACHE BOOL "libjxl plugins option" FORCE)
+        set(JPEGXL_ENABLE_EXAMPLES OFF CACHE BOOL "libjxl examples option" FORCE)
+        set(JPEGXL_ENABLE_BENCHMARK OFF CACHE BOOL "libjxl benchmarks option" FORCE)
         set(JPEGXL_ENABLE_SKCMS OFF CACHE BOOL "libjxl skcms option" FORCE)
-        # JPEGXL_FORCE_SYSTEM_HWY variable is used by libjxl
         set(JPEGXL_FORCE_SYSTEM_HWY OFF CACHE BOOL "libjxl highway option" FORCE)
         sdl_check_project_in_subfolder(external/libjxl libjxl SDL2IMAGE_VENDORED)
         set(BUILD_SHARED_LIBS ${SDL2IMAGE_JXL_SHARED})
